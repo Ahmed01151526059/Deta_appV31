@@ -17,8 +17,7 @@
       ]
     }
   },
-  "updateContentCommand": "[ -f packages.txt ] && sudo apt update && sudo apt upgrade -y && sudo xargs apt install -y <packages.txt; [ -f requirements.txt ] && pip3 install --user -r requirements.txt; pip3 install --user streamlit; echo '✅ Packages installed and Requirements met'",
-  "postAttachCommand": {
+"updateContentCommand": "[ -f packages.txt ] && sudo apt update && sudo apt upgrade -y && sudo xargs apt install -y <packages.txt; [ -f requirements.txt ] && pip3 install --user -r requirements.txt; pip3 install --user streamlit matplotlib requests urllib3; echo '✅ Packages installed and Requirements met'",  "postAttachCommand": {
     "server": "streamlit run web app (e& data tool).py --server.enableCORS false --server.enableXsrfProtection false"
   },
   "portsAttributes": {
