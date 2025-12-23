@@ -31,7 +31,7 @@ try:
 except ImportError:
     pyodbc = None
 
-from matplotlib.figure import Figure
+ 
 import matplotlib.pyplot as plt
 
 warnings.filterwarnings("ignore")
@@ -272,11 +272,11 @@ class SmartDataTool:
             unsafe_allow_html=True
         )
 
-        source = st.selectbox(
+    source = st.selectbox(
     "Data Source",
     ["Tableau", "Power BI", "Excel", "CSV", "Database"],
     index=["Tableau", "Power BI", "Excel", "CSV", "Database"].index(st.session_state.get("selected_source", "Tableau")),
-    key="login_source_selection"  # Unique key to avoid conflict
+    key="login_source_dropdown"  # Changed this key to be unique
 )
         
         self.selected_source = source
@@ -2251,6 +2251,7 @@ def run_app():
 
 if __name__ == "__main__":
     run_app()
+
 
 
 
