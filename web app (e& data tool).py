@@ -394,10 +394,7 @@ class SmartDataTool:
 
 
 
-import urllib3
-import streamlit as st
-import requests
-import xml.etree.ElementTree as ET
+
 
     def _login_tableau(self, user, pwd):
         """
@@ -2269,6 +2266,7 @@ def run_app():
 
 if __name__ == "__main__":
     run_app()
+
 
 
 
