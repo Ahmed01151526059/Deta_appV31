@@ -1,7 +1,25 @@
-streamlit>=1.32.0
-pandas>=2.0.0
-numpy>=1.24.0
-matplotlib>=3.7.0
-seaborn>=0.12.0
-requests>=2.31.0
-reportlab>=4.0.0
+# Web Framework
+streamlit
+
+# Data Processing
+pandas
+numpy
+
+# HTTP & API Connectivity
+requests
+urllib3
+
+# Visualization
+matplotlib
+
+# Database Connectivity (Optional based on your code)
+# Install only the ones you intend to use
+sqlite3
+pymysql
+pyodbc
+
+# PDF Export (Required for the Export to PDF feature)
+reportlab
+
+# XML Parsing
+defusedxml
