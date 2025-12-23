@@ -391,32 +391,63 @@ class SmartDataTool:
             st.session_state["login_status"] = "Not implemented."
             return
 
-    def _login_tableau(self, user, pwd):
-        try:
-            signin_url = f"{DOMAIN}/api/{API_VERSION}/auth/signin"
-            payload = f"""<tsRequest><credentials name="{user}" password="{pwd}"><site contentUrl="{SITE_CONTENT_URL}" /></credentials></tsRequest>"""
-            headers = {"Content-Type": "application/xml"}
-            response = requests.post(signin_url, data=payload, headers=headers, verify=False, timeout=60)
-            if response.status_code != 200:
-                self.stop_loading()
-                st.session_state["login_status"] = "Login failed."
-                return
+   def _login_tableau(self, user, pwd):
+    try:
+        # Use a session for better connection pooling and header management
+        session = requests.Session()
+        signin_url = f"{DOMAIN}/api/{API_VERSION}/auth/signin"
+        
+        # Construct payload
+        payload = f"""<tsRequest>
+            <credentials name="{user}" password="{pwd}">
+                <site contentUrl="{SITE_CONTENT_URL}" />
+            </credentials>
+        </tsRequest>"""
+        
+        headers = {"Content-Type": "application/xml", "Accept": "application/xml"}
+        
+        # Verify=False is kept as per your code for internal corp certs
+        response = session.post(signin_url, data=payload, headers=headers, verify=False, timeout=60)
+        
+        if response.status_code != 200:
+            # Try to extract the specific error message from Tableau's XML response
+            try:
+                error_root = ET.fromstring(response.text)
+                err_code = error_root.find(".//error").attrib.get("code")
+                err_det = error_root.find(".//detail").text
+                st.session_state["login_status"] = f"Tableau Error {err_code}: {err_det}"
+            except:
+                st.session_state["login_status"] = f"Login failed with status: {response.status_code}"
+            self.stop_loading()
+            return
 
-            root = ET.fromstring(response.text)
-            namespace = {"t": "http://tableau.com/api"}
-            self.auth_token = root.find(".//t:credentials", namespace).attrib["token"]
-            self.site_id = root.find(".//t:site", namespace).attrib["id"]
-
+        # Parse success response
+        root = ET.fromstring(response.text)
+        namespace = {"t": "http://tableau.com/api"}
+        
+        credentials = root.find(".//t:credentials", namespace)
+        site = root.find(".//t:site", namespace)
+        
+        if credentials is not None and site is not None:
+            self.auth_token = credentials.attrib["token"]
+            self.site_id = site.attrib["id"]
+            
             st.session_state["login_status"] = "Connected."
             st.session_state["page"] = "main"
             self.stop_loading()
-
-            # fetch workbooks immediately
+            
+            # Fetch workbooks
             self._fetch_workbooks()
-
-        except Exception as e:
+        else:
+            st.session_state["login_status"] = "Response parsed but token not found."
             self.stop_loading()
-            st.session_state["login_status"] = f"Connection Error: {e}"
+
+    except requests.exceptions.ConnectionError:
+        self.stop_loading()
+        st.session_state["login_status"] = "Network Error: Cannot reach the Tableau server. Check VPN/Proxy."
+    except Exception as e:
+        self.stop_loading()
+        st.session_state["login_status"] = f"Unexpected Error: {str(e)}"
 
     def _login_powerbi(self):
         """
@@ -2205,3 +2236,4 @@ def run_app():
 
 if __name__ == "__main__":
     run_app()
+
