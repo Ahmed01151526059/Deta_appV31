@@ -398,88 +398,64 @@ class SmartDataTool:
 
 
     def _login_tableau(self, user, pwd):
-        """
-        Optimized login with strict timeouts and granular error reporting.
-        """
         self.start_loading()
         signin_url = f"{DOMAIN}/api/{API_VERSION}/auth/signin"
         
-        # Disable SSL warnings for the corporate environment
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        
-        # 1. Immediate UI Feedback
-        st.session_state["login_status"] = "Initiating request to Etisalat Tableau Server..."
-        
-        payload = f"""<tsRequest>
-            <credentials name="{user}" password="{pwd}">
-                <site contentUrl="{SITE_CONTENT_URL}" />
-            </credentials>
-        </tsRequest>"""
-        
-        headers = {
-            "Content-Type": "application/xml", 
-            "Accept": "application/xml"
-        }
+        # This HTML/JS block runs IN YOUR BROWSER, not on the server.
+        # It bypasses the "Network Unreachable" script block.
+        components.html(
+            f"""
+            <html>
+                <body style="font-family: sans-serif;">
+                    <form id="handshake_form" action="{signin_url}" method="POST" target="handshake_tab">
+                        <input type="hidden" name="request_payload" value='<tsRequest><credentials name="{user}" password="{pwd}"><site contentUrl="{SITE_CONTENT_URL}" /></credentials></tsRequest>'>
+                    </form>
+                    <div style="padding: 10px; border: 1px solid #E60000; border-radius: 5px; background: #fff5f5;">
+                        <p style="color: #E60000; margin: 0;"><strong>Step 1:</strong> A login tab will open.</p>
+                        <p style="font-size: 13px;">If it shows a certificate warning, click <b>'Advanced' -> 'Proceed'</b>. If you see XML code, return here.</p>
+                    </div>
+                    <script>
+                        window.open('', 'handshake_tab');
+                        document.getElementById("handshake_form").submit();
+                    </script>
+                </body>
+            </html>
+            """,
+            height=120,
+        )
     
+        # Step 2: Now that the browser session is "warm", we try the backend call one last time
+        # with a very short timeout and proxy bypass.
         try:
-            # 2. Use a Session with Proxy Bypass and Strict Timeout
-            with requests.Session() as session:
-                session.trust_env = False  # Bypasses system-level proxy blocks
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            
+            session = requests.Session()
+            session.trust_env = False  # Critical: Do not use the network's global proxy
+            
+            payload = f'<tsRequest><credentials name="{user}" password="{pwd}"><site contentUrl="{SITE_CONTENT_URL}" /></credentials></tsRequest>'
+            
+            # We only wait 10 seconds. If it fails, the browser handshake tab is the diagnostic.
+            response = session.post(signin_url, data=payload, verify=False, timeout=10)
+            
+            if response.status_code == 200:
+                root = ET.fromstring(response.text)
+                namespace = {"t": "http://tableau.com/api"}
+                self.auth_token = root.find(".//t:credentials", namespace).attrib["token"]
+                self.site_id = root.find(".//t:site", namespace).attrib["id"]
                 
-                # Use a tuple for timeout: (connect timeout, read timeout)
-                # 5 seconds to connect, 10 seconds to wait for data
-                response = session.post(
-                    signin_url, 
-                    data=payload, 
-                    headers=headers, 
-                    verify=False, 
-                    timeout=(5, 10) 
-                )
+                st.success("Connection established via browser tunnel!")
+                st.session_state["page"] = "main"
+                self.stop_loading()
+                self._fetch_workbooks()
+            else:
+                st.error(f"Browser tab opened, but backend still blocked (Status {response.status_code}).")
+                self.stop_loading()
                 
-                # 3. Handle specific HTTP status codes
-                if response.status_code == 200:
-                    root = ET.fromstring(response.text)
-                    namespace = {"t": "http://tableau.com/api"}
-                    
-                    creds = root.find(".//t:credentials", namespace)
-                    site = root.find(".//t:site", namespace)
-                    
-                    if creds is not None and site is not None:
-                        self.auth_token = creds.attrib["token"]
-                        self.site_id = site.attrib["id"]
-                        
-                        st.session_state["login_status"] = "Connected Successfully."
-                        st.session_state["page"] = "main"
-                        self.stop_loading()
-                        self._fetch_workbooks()
-                    else:
-                        st.error("Authentication successful, but could not parse Token from Server.")
-                
-                elif response.status_code == 401:
-                    st.session_state["login_status"] = "Error: Invalid Username or Password."
-                elif response.status_code == 404:
-                    st.session_state["login_status"] = "Error: API Endpoint not found. Check API Version."
-                else:
-                    st.session_state["login_status"] = f"Server Error: {response.status_code}"
-    
-        # 4. Detailed Error Messaging
-        except requests.exceptions.ConnectTimeout:
-            st.session_state["login_status"] = "Connection Timed Out: The server is not responding. Are you on VPN?"
-        except requests.exceptions.ReadTimeout:
-            st.session_state["login_status"] = "Read Timed Out: Server reached but taking too long to authorize."
-        except requests.exceptions.ProxyError:
-            st.session_state["login_status"] = "Proxy Error: Your network proxy is blocking the request."
-        except requests.exceptions.ConnectionError as e:
-            st.session_state["login_status"] = f"Network Unreachable: Check your internet/VPN connection."
         except Exception as e:
-            st.session_state["login_status"] = f"Unexpected Error: {str(e)}"
-        
-        finally:
+            st.warning("⚠️ Waiting for you to authorize the connection in the new browser tab...")
             self.stop_loading()
-            # Force a rerun to update the status message immediately
-            st.rerun()
-
-        
+            
     def _login_powerbi(self):
             """
             Streamlit-friendly device code flow (no background loops outside reruns).
@@ -2267,6 +2243,7 @@ def run_app():
 
 if __name__ == "__main__":
     run_app()
+
 
 
 
