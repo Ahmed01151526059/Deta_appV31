@@ -391,10 +391,8 @@ class SmartDataTool:
             st.session_state["login_status"] = "Not implemented."
             return
 
-    import streamlit.components.v1 as components
 
-    def _login_tableau(self, user, pwd):
-        import streamlit.components.v1 as components
+
 
 def _login_tableau(self, user, pwd):
     self.start_loading()
@@ -2242,6 +2240,7 @@ def run_app():
 
 if __name__ == "__main__":
     run_app()
+
 
 
 
