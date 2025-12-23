@@ -1,7 +1,7 @@
 # ============================================================
 # Streamlit Version (Converted from Tkinter) - PART 1..7
 # ============================================================
-
+import streamlit.components.v1 as components
 import requests
 import xml.etree.ElementTree as ET
 import pandas as pd
@@ -40,7 +40,7 @@ PBI_CLIENT_ID = "44cf9ce4-c9f5-428b-94e9-25625e20490e"
 PBI_TENANT_ID = "956d0a5b-65df-40ee-b210-145b0e79eac8"
 
 # --- TABLEAU / GENERAL CONFIG ---
-DOMAIN = "as2628aufal02.etisalat.corp.ae"
+DOMAIN = "https://as2628aufal02.etisalat.corp.ae"
 API_VERSION = "3.25"
 SITE_CONTENT_URL = ""
 
@@ -391,94 +391,107 @@ class SmartDataTool:
             st.session_state["login_status"] = "Not implemented."
             return
 
+    import streamlit.components.v1 as components
+
     def _login_tableau(self, user, pwd):
+        """
+        Revised browser-centric connection logic. 
+        If the backend fails, we provide a browser-based 'Handshake' button.
+        """
         try:
             self.start_loading()
-            # 1. Force-disable SSL warnings in the Streamlit UI/Console
             import urllib3
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
             
-            # 2. Create a session that ignores system proxies
-            # This prevents the app from trying to go 'out' to the internet to find an 'internal' server.
-            session = requests.Session()
-            session.trust_env = False 
-            
             signin_url = f"{DOMAIN}/api/{API_VERSION}/auth/signin"
             
+            # 1. Attempt one last 'Direct' backend call with strict proxy bypass
+            session = requests.Session()
+            session.trust_env = False
+            
             payload = f"""<tsRequest>
-                <credentials name="{user}" password="{pwd}">
-                    <site contentUrl="{SITE_CONTENT_URL}" />
-                </credentials>
+                <credentials name="{user}" password="{pwd}"><site contentUrl="{SITE_CONTENT_URL}" /></credentials>
             </tsRequest>"""
             
-            headers = {"Content-Type": "application/xml", "Accept": "application/xml"}
-            
-            # 3. Perform the request with verify=False (SSL Off)
-            response = session.post(
-                signin_url, 
-                data=payload, 
-                headers=headers, 
-                verify=False, 
-                timeout=20
-            )
-            
-            if response.status_code == 200:
-                root = ET.fromstring(response.text)
-                namespace = {"t": "http://tableau.com/api"}
-                self.auth_token = root.find(".//t:credentials", namespace).attrib["token"]
-                self.site_id = root.find(".//t:site", namespace).attrib["id"]
-                
-                st.session_state["login_status"] = "Connected."
-                st.session_state["page"] = "main"
-                self.stop_loading()
-                self._fetch_workbooks()
-            else:
-                st.session_state["login_status"] = f"Server returned status {response.status_code}"
-                self.stop_loading()
+            try:
+                response = session.post(signin_url, data=payload, verify=False, timeout=5)
+                if response.status_code == 200:
+                    root = ET.fromstring(response.text)
+                    namespace = {"t": "http://tableau.com/api"}
+                    self.auth_token = root.find(".//t:credentials", namespace).attrib["token"]
+                    self.site_id = root.find(".//t:site", namespace).attrib["id"]
+                    st.session_state["login_status"] = "Connected via Backend."
+                    st.session_state["page"] = "main"
+                    self.stop_loading()
+                    self._fetch_workbooks()
+                    return
+            except:
+                pass # Fallback to browser method
     
-        except requests.exceptions.ConnectionError:
-            # This usually means the DOMAIN URL is incorrect or the VPN is disconnected
-            st.session_state["login_status"] = "Still cannot reach server. Please check if the Tableau URL is accessible in your browser."
+            # 2. BROWSER HANDSHAKE METHOD
+            # If backend fails, we instruct the user to open the API in their browser 
+            # to clear the 'Unauthorized' or 'Certificate' block.
+            
+            st.warning("⚠️ Backend Connection Blocked by Network.")
+            st.write("Please click the button below to authorize the connection in your browser tab, then return here and click 'Connect' again.")
+            
+            # This button opens the Tableau XML sign-in page directly in the user's browser
+            st.link_button("🔓 Authorize in Browser", signin_url)
+            
+            # 3. Use an HTML component to ping the server from the browser side
+            components.html(
+                f"""
+                <script>
+                    fetch("{signin_url}", {{ mode: 'no-cors' }})
+                    .then(() => console.log("Browser handshake successful"))
+                    .catch(() => console.log("Browser handshake failed"));
+                </script>
+                """,
+                height=0,
+            )
+    
+            st.session_state["login_status"] = "Waiting for browser handshake..."
             self.stop_loading()
+    
         except Exception as e:
             st.session_state["login_status"] = f"Connection Failed: {str(e)}"
             self.stop_loading()
-
-    def _login_powerbi(self):
-        """
-        Streamlit-friendly device code flow (no background loops outside reruns).
-        We start flow, store codes, then poll quickly here.
-        """
-        try:
-            base_url = f"https://login.microsoftonline.com/{PBI_TENANT_ID}/oauth2/v2.0"
-            scope = "https://analysis.windows.net/powerbi/api/.default"
-            payload = {"client_id": PBI_CLIENT_ID, "scope": f"{scope} offline_access"}
-            resp = requests.post(f"{base_url}/devicecode", data=payload, verify=False, timeout=30)
-
-            if resp.status_code != 200:
-                raise Exception(f"Init Failed: {resp.text}")
-
-            data = resp.json()
-            user_code = data.get("user_code")
-            device_code = data.get("device_code")
-            verification_uri = data.get("verification_uri")
-            interval = float(data.get("interval", 5))
-
-            st.session_state["pbi_verification_uri"] = verification_uri
-            st.session_state["pbi_user_code"] = user_code
-            st.session_state["pbi_device_code"] = device_code
-            st.session_state["pbi_interval"] = interval
-            st.session_state["page"] = "pbi_login"
-            st.session_state["login_status"] = "Waiting for authentication..."
-
-            self.stop_loading()
-
-            _ui_info("Power BI", "Device flow started. Use the code shown below. After login, click 'Connect' again to continue.")
-
-        except Exception as e:
-            self.stop_loading()
-            st.session_state["pbi_error"] = str(e)
-            st.session_state["page"] = "login"
+    
+        def _login_powerbi(self):
+            """
+            Streamlit-friendly device code flow (no background loops outside reruns).
+            We start flow, store codes, then poll quickly here.
+            """
+            try:
+                base_url = f"https://login.microsoftonline.com/{PBI_TENANT_ID}/oauth2/v2.0"
+                scope = "https://analysis.windows.net/powerbi/api/.default"
+                payload = {"client_id": PBI_CLIENT_ID, "scope": f"{scope} offline_access"}
+                resp = requests.post(f"{base_url}/devicecode", data=payload, verify=False, timeout=30)
+    
+                if resp.status_code != 200:
+                    raise Exception(f"Init Failed: {resp.text}")
+    
+                data = resp.json()
+                user_code = data.get("user_code")
+                device_code = data.get("device_code")
+                verification_uri = data.get("verification_uri")
+                interval = float(data.get("interval", 5))
+    
+                st.session_state["pbi_verification_uri"] = verification_uri
+                st.session_state["pbi_user_code"] = user_code
+                st.session_state["pbi_device_code"] = device_code
+                st.session_state["pbi_interval"] = interval
+                st.session_state["page"] = "pbi_login"
+                st.session_state["login_status"] = "Waiting for authentication..."
+    
+                self.stop_loading()
+    
+                _ui_info("Power BI", "Device flow started. Use the code shown below. After login, click 'Connect' again to continue.")
+    
+            except Exception as e:
+                self.stop_loading()
+                st.session_state["pbi_error"] = str(e)
+                st.session_state["page"] = "login"
 
     def _poll_powerbi_token_if_ready(self):
         """
@@ -2231,6 +2244,7 @@ def run_app():
 
 if __name__ == "__main__":
     run_app()
+
 
 
 
