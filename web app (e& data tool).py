@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 from io import StringIO
 import io as pyio
+import urllib3
 
 import streamlit as st
 
@@ -2266,6 +2267,7 @@ def run_app():
 
 if __name__ == "__main__":
     run_app()
+
 
 
 
