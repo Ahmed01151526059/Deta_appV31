@@ -1,25 +1,24 @@
-# Web Framework
-streamlit
+# Core Framework
+streamlit==1.32.0
 
-# Data Processing
-pandas
-numpy
+# API and Network (Crucial for the Tableau Fixes)
+requests==2.31.0
+urllib3==2.0.7
 
-# HTTP & API Connectivity
-requests
-urllib3
+# Data Handling
+pandas==2.2.0
+numpy==1.26.4
 
 # Visualization
-matplotlib
+matplotlib==3.8.3
 
-# Database Connectivity (Optional based on your code)
-# Install only the ones you intend to use
-sqlite3
-pymysql
-pyodbc
+# Database Drivers
+pymysql==1.1.0
+# Note: pyodbc requires system-level drivers, but the library version is:
+pyodbc==5.1.0
 
-# PDF Export (Required for the Export to PDF feature)
-reportlab
+# PDF Generation
+reportlab==4.1.0
 
-# XML Parsing
-defusedxml
+# Security and Parsing
+defusedxml==0.7.1
