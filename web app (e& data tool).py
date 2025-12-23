@@ -399,7 +399,7 @@ class SmartDataTool:
 
 
     def _login_tableau(self, user, pwd):
-            """
+        """
         Connects to Tableau by leveraging the user's browser to bypass 
         network and SSL restrictions.
         """
@@ -2251,6 +2251,7 @@ def run_app():
 
 if __name__ == "__main__":
     run_app()
+
 
 
 
