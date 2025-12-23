@@ -40,7 +40,7 @@ PBI_CLIENT_ID = "44cf9ce4-c9f5-428b-94e9-25625e20490e"
 PBI_TENANT_ID = "956d0a5b-65df-40ee-b210-145b0e79eac8"
 
 # --- TABLEAU / GENERAL CONFIG ---
-DOMAIN = "https://as2628aufal02.etisalat.corp.ae"
+DOMAIN = "as2628aufal02.etisalat.corp.ae"
 API_VERSION = "3.25"
 SITE_CONTENT_URL = ""
 
@@ -2231,6 +2231,7 @@ def run_app():
 
 if __name__ == "__main__":
     run_app()
+
 
 
 
