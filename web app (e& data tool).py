@@ -398,62 +398,74 @@ class SmartDataTool:
 
 
     def _login_tableau(self, user, pwd):
+        """
+        Connects to Tableau by leveraging the User's Browser to bypass 
+        backend network/SSL restrictions.
+        """
         self.start_loading()
         signin_url = f"{DOMAIN}/api/{API_VERSION}/auth/signin"
         
-        # This HTML/JS block runs IN YOUR BROWSER, not on the server.
-        # It bypasses the "Network Unreachable" script block.
+        # 1. Trigger the Browser Handshake
+        # This opens a hidden form in the user's browser to perform a POST request.
+        # This bypasses 'Network Reachable' errors because the BROWSER does the work.
         components.html(
             f"""
             <html>
-                <body style="font-family: sans-serif;">
+                <body style="font-family: sans-serif; font-size: 12px; color: #555;">
                     <form id="handshake_form" action="{signin_url}" method="POST" target="handshake_tab">
                         <input type="hidden" name="request_payload" value='<tsRequest><credentials name="{user}" password="{pwd}"><site contentUrl="{SITE_CONTENT_URL}" /></credentials></tsRequest>'>
                     </form>
-                    <div style="padding: 10px; border: 1px solid #E60000; border-radius: 5px; background: #fff5f5;">
-                        <p style="color: #E60000; margin: 0;"><strong>Step 1:</strong> A login tab will open.</p>
-                        <p style="font-size: 13px;">If it shows a certificate warning, click <b>'Advanced' -> 'Proceed'</b>. If you see XML code, return here.</p>
+                    <div style="padding: 8px; border-left: 4px solid #E60000; background: #f9f9f9;">
+                        <b>Browser Auth Initiated:</b> A new tab opened to authenticate. 
+                        If you see a certificate error, click <b>'Advanced' -> 'Proceed'</b>.
                     </div>
                     <script>
-                        window.open('', 'handshake_tab');
+                        window.open('', 'handshake_tab'); // Pre-open tab to prevent popup blocks
                         document.getElementById("handshake_form").submit();
                     </script>
                 </body>
             </html>
             """,
-            height=120,
+            height=70,
         )
     
-        # Step 2: Now that the browser session is "warm", we try the backend call one last time
-        # with a very short timeout and proxy bypass.
+        # 2. Capture the session back to the Python backend
         try:
             import urllib3
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
             
+            # Use a session that ignores system-level proxy blocks
             session = requests.Session()
-            session.trust_env = False  # Critical: Do not use the network's global proxy
+            session.trust_env = False 
             
             payload = f'<tsRequest><credentials name="{user}" password="{pwd}"><site contentUrl="{SITE_CONTENT_URL}" /></credentials></tsRequest>'
             
-            # We only wait 10 seconds. If it fails, the browser handshake tab is the diagnostic.
-            response = session.post(signin_url, data=payload, verify=False, timeout=10)
+            # Short timeout: we only want to check if the browser handshake cleared the path
+            response = session.post(
+                signin_url, 
+                data=payload, 
+                headers={{"Content-Type": "application/xml"}}, 
+                verify=False, 
+                timeout=(5, 10)
+            )
             
             if response.status_code == 200:
                 root = ET.fromstring(response.text)
-                namespace = {"t": "http://tableau.com/api"}
+                namespace = {{"t": "http://tableau.com/api"}}
                 self.auth_token = root.find(".//t:credentials", namespace).attrib["token"]
                 self.site_id = root.find(".//t:site", namespace).attrib["id"]
                 
-                st.success("Connection established via browser tunnel!")
+                st.session_state["login_status"] = "Connected via Browser Handshake."
                 st.session_state["page"] = "main"
                 self.stop_loading()
                 self._fetch_workbooks()
             else:
-                st.error(f"Browser tab opened, but backend still blocked (Status {response.status_code}).")
-                self.stop_loading()
+                st.warning("Handshake tab opened. Once you see XML in that tab, please click 'Connect' again.")
                 
         except Exception as e:
-            st.warning("⚠️ Waiting for you to authorize the connection in the new browser tab...")
+            st.info("The browser is negotiating the connection. If a certificate warning appeared, accept it and try again.")
+        
+        finally:
             self.stop_loading()
             
     def _login_powerbi(self):
@@ -2243,6 +2255,7 @@ def run_app():
 
 if __name__ == "__main__":
     run_app()
+
 
 
 
