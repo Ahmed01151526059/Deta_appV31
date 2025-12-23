@@ -394,69 +394,67 @@ class SmartDataTool:
     import streamlit.components.v1 as components
 
     def _login_tableau(self, user, pwd):
-        """
-        Revised browser-centric connection logic. 
-        If the backend fails, we provide a browser-based 'Handshake' button.
-        """
-        try:
-            self.start_loading()
-            import urllib3
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-            
-            signin_url = f"{DOMAIN}/api/{API_VERSION}/auth/signin"
-            
-            # 1. Attempt one last 'Direct' backend call with strict proxy bypass
-            session = requests.Session()
-            session.trust_env = False
-            
-            payload = f"""<tsRequest>
-                <credentials name="{user}" password="{pwd}"><site contentUrl="{SITE_CONTENT_URL}" /></credentials>
-            </tsRequest>"""
-            
-            try:
-                response = session.post(signin_url, data=payload, verify=False, timeout=5)
-                if response.status_code == 200:
-                    root = ET.fromstring(response.text)
-                    namespace = {"t": "http://tableau.com/api"}
-                    self.auth_token = root.find(".//t:credentials", namespace).attrib["token"]
-                    self.site_id = root.find(".//t:site", namespace).attrib["id"]
-                    st.session_state["login_status"] = "Connected via Backend."
-                    st.session_state["page"] = "main"
-                    self.stop_loading()
-                    self._fetch_workbooks()
-                    return
-            except:
-                pass # Fallback to browser method
+        import streamlit.components.v1 as components
+
+def _login_tableau(self, user, pwd):
+    self.start_loading()
+    signin_url = f"{DOMAIN}/api/{API_VERSION}/auth/signin"
     
-            # 2. BROWSER HANDSHAKE METHOD
-            # If backend fails, we instruct the user to open the API in their browser 
-            # to clear the 'Unauthorized' or 'Certificate' block.
-            
-            st.warning("⚠️ Backend Connection Blocked by Network.")
-            st.write("Please click the button below to authorize the connection in your browser tab, then return here and click 'Connect' again.")
-            
-            # This button opens the Tableau XML sign-in page directly in the user's browser
-            st.link_button("🔓 Authorize in Browser", signin_url)
-            
-            # 3. Use an HTML component to ping the server from the browser side
-            components.html(
-                f"""
+    # We embed a hidden JavaScript form that executes a POST request
+    # This uses the browser's existing network path and SSL trust
+    components.html(
+        f"""
+        <html>
+            <body>
+                <form id="tableau_login" action="{signin_url}" method="POST" target="_blank">
+                    <input type="hidden" name="request_payload" value='<tsRequest><credentials name="{user}" password="{pwd}"><site contentUrl="{SITE_CONTENT_URL}" /></credentials></tsRequest>'>
+                </form>
                 <script>
-                    fetch("{signin_url}", {{ mode: 'no-cors' }})
-                    .then(() => console.log("Browser handshake successful"))
-                    .catch(() => console.log("Browser handshake failed"));
+                    // Automatically submit the POST request in a new tab
+                    document.getElementById("tableau_login").submit();
                 </script>
-                """,
-                height=0,
-            )
-    
-            st.session_state["login_status"] = "Waiting for browser handshake..."
+                <div style="font-family: sans-serif; color: #E60000; text-align: center;">
+                    <b>Action Required:</b> A new tab has opened to perform the login handshake. 
+                    If you see XML code in that tab, the connection is active. 
+                    Return here to continue.
+                </div>
+            </body>
+        </html>
+        """,
+        height=100,
+    )
+
+    # Since the browser handles the "POST", we can now try the backend call 
+    # again because the SSL/VPN tunnel is "warmed up" in the browser session.
+    try:
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        
+        session = requests.Session()
+        session.trust_env = False
+        payload = f"""<tsRequest><credentials name="{user}" password="{pwd}"><site contentUrl="{SITE_CONTENT_URL}" /></credentials></tsRequest>"""
+        
+        response = session.post(signin_url, data=payload, verify=False, timeout=10)
+        
+        if response.status_code == 200:
+            root = ET.fromstring(response.text)
+            namespace = {{"t": "http://tableau.com/api"}}
+            self.auth_token = root.find(".//t:credentials", namespace).attrib["token"]
+            self.site_id = root.find(".//t:site", namespace).attrib["id"]
+            
+            st.session_state["login_status"] = "Connected via Browser Handshake."
+            st.session_state["page"] = "main"
             self.stop_loading()
-    
-        except Exception as e:
-            st.session_state["login_status"] = f"Connection Failed: {str(e)}"
+            self._fetch_workbooks()
+        else:
+            st.session_state["login_status"] = "Handshake started. Please click 'Connect' again."
             self.stop_loading()
-    
+            
+    except Exception as e:
+        st.info("Please ensure you accepted the certificate in the new tab, then click 'Connect' again.")
+        self.stop_loading()
+
+        
         def _login_powerbi(self):
             """
             Streamlit-friendly device code flow (no background loops outside reruns).
@@ -2244,6 +2242,7 @@ def run_app():
 
 if __name__ == "__main__":
     run_app()
+
 
 
 
