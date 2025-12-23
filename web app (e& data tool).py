@@ -30,8 +30,7 @@ try:
 except ImportError:
     pyodbc = None
 
-from matplotlib.figure import Figure
-import matplotlib.pyplot as plt
+
 
 warnings.filterwarnings("ignore")
 
@@ -2205,3 +2204,4 @@ def run_app():
 
 if __name__ == "__main__":
     run_app()
+
