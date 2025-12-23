@@ -394,13 +394,14 @@ class SmartDataTool:
     def _login_tableau(self, user, pwd):
         try:
             self.start_loading()
-            # Disable insecure request warnings in the console
+            # 1. Force-disable SSL warnings in the Streamlit UI/Console
             import urllib3
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
             
-            # Use a session and explicitly disable proxies for internal domains if needed
+            # 2. Create a session that ignores system proxies
+            # This prevents the app from trying to go 'out' to the internet to find an 'internal' server.
             session = requests.Session()
-            session.trust_env = False  # This prevents requests from using system-level proxy settings
+            session.trust_env = False 
             
             signin_url = f"{DOMAIN}/api/{API_VERSION}/auth/signin"
             
@@ -410,51 +411,37 @@ class SmartDataTool:
                 </credentials>
             </tsRequest>"""
             
-            headers = {
-                "Content-Type": "application/xml",
-                "Accept": "application/xml"
-            }
+            headers = {"Content-Type": "application/xml", "Accept": "application/xml"}
             
-            # verify=False explicitly disables SSL certificate validation
+            # 3. Perform the request with verify=False (SSL Off)
             response = session.post(
                 signin_url, 
                 data=payload, 
                 headers=headers, 
                 verify=False, 
-                timeout=30
+                timeout=20
             )
             
-            if response.status_code != 200:
-                st.session_state["login_status"] = f"Tableau Error: {response.status_code}"
-                self.stop_loading()
-                return
-    
-            root = ET.fromstring(response.text)
-            namespace = {"t": "http://tableau.com/api"}
-            
-            creds_node = root.find(".//t:credentials", namespace)
-            site_node = root.find(".//t:site", namespace)
-            
-            if creds_node is not None:
-                self.auth_token = creds_node.attrib["token"]
-                self.site_id = site_node.attrib["id"]
+            if response.status_code == 200:
+                root = ET.fromstring(response.text)
+                namespace = {"t": "http://tableau.com/api"}
+                self.auth_token = root.find(".//t:credentials", namespace).attrib["token"]
+                self.site_id = root.find(".//t:site", namespace).attrib["id"]
                 
                 st.session_state["login_status"] = "Connected."
                 st.session_state["page"] = "main"
                 self.stop_loading()
                 self._fetch_workbooks()
             else:
-                st.session_state["login_status"] = "Login failed: Token not found in XML."
+                st.session_state["login_status"] = f"Server returned status {response.status_code}"
                 self.stop_loading()
     
-        except requests.exceptions.SSLError:
-            st.session_state["login_status"] = "SSL Error: Even with verify=False, the handshake failed."
-            self.stop_loading()
         except requests.exceptions.ConnectionError:
-            st.session_state["login_status"] = "Network Error: Cannot reach server. Verify VPN or Domain URL."
+            # This usually means the DOMAIN URL is incorrect or the VPN is disconnected
+            st.session_state["login_status"] = "Still cannot reach server. Please check if the Tableau URL is accessible in your browser."
             self.stop_loading()
         except Exception as e:
-            st.session_state["login_status"] = f"Error: {str(e)}"
+            st.session_state["login_status"] = f"Connection Failed: {str(e)}"
             self.stop_loading()
 
     def _login_powerbi(self):
@@ -2244,6 +2231,7 @@ def run_app():
 
 if __name__ == "__main__":
     run_app()
+
 
 
 
