@@ -157,7 +157,6 @@ class SmartDataTool:
     def __init__(self):
         self._set_page()
         self.reset_session()
-        self.create_login_screen()
 
     def _set_page(self):
         st.set_page_config(page_title="e& AI Data Tool", layout="wide")
@@ -2189,18 +2188,19 @@ class SmartDataTool:
 
 
 def run_app():
+    # Initialize the object in session state if not present
     if "app_instance" not in st.session_state:
         st.session_state.app_instance = SmartDataTool()
 
     app = st.session_state.app_instance
 
-    # If still on login, show login screen
-    if st.session_state.get("page") != "main":
+    # Check the page state to decide what to render
+    if st.session_state.get("page") == "main":
+        app.create_main_layout()
+    elif st.session_state.get("page") == "pbi_login":
+        app.create_login_screen() # The login screen handles PBI specific UI
+    else:
         app.create_login_screen()
-        return
-
-    # Otherwise show main app
-    app.create_main_layout()
 
 
 if __name__ == "__main__":
